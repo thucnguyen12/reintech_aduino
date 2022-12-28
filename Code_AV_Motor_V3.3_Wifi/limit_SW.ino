@@ -25,6 +25,7 @@ void checkLM_SW(bool stt) {
     if (digitalRead(SW1) == 0) {
       if (digitalRead(SW1) == 0) {
         Serial.println("Cham SW1!");
+        check_current_for_direction = CHECK_OUT_CRASH;
         Serial.print("step_in: ");
         Serial.println(step_in);
         //        Serial.print("step_out: ");

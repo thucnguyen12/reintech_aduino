@@ -4,20 +4,28 @@ void toc_do() {
   } else {
     //    long t_run = millis() - time_run;
     if (step_in2 < Step_up_down) {
+      // if (step_in2 % 100 == 0)
+      //Serial.println("step in2 < step_up down:"+ String(step_in2));
       sped = speed_start - (step_in2 / 10) * Accelera;
     } else if (step_in < Step_speed_down) {
+      // if (step_in % 100 == 0)
+      //Serial.println("step in < step_speed_down:"+ String(step_in));
       sped = speed_max;
       if (stt_direction) {
         check_current_for_direction = CHECK_OUT_CRASH;
         check_current(Adc_delta1);
       }
     } else if (step_in < Step_speed_min) {
+      // if (step_in % 100 == 0)
+      // Serial.println("step in < step_speed_min: "+ String(step_in));
       sped = speed_max + ((step_in - Step_speed_down) / 10) * Accelera;
       if (stt_direction) {
         check_current_for_direction = CHECK_IN_CRASH;
         check_current2(Adc_delta2);
       }
     } else if (step_in > Step_speed_min) {
+      // if (step_in % 100 == 0)
+      //Serial.println("step in > step_speed_min: "+ String(step_in));
       sped = speed_min;
       check_current_for_direction = CHECK_IN_CRASH;
       check_current2(Adc_delta2);
@@ -111,9 +119,11 @@ void Motor_stop() {
 
   dk_run = false;
   if (stt_direction == 1) {
+    Serial.println("Step_speed_min - step_in");
     Serial.println(Step_speed_min - step_in);
     ;
   } else {
+    Serial.println("step_in");
     Serial.println(step_in);
   }
 }
@@ -162,7 +172,7 @@ void check_current(float deltaAdc) {
       // Serial.println("delta: " + String(delta));
       // Serial.println("Old_val1: " + String(Old_val1));
       // Serial.println("Old_val2: " + String(Old_val2));
-      Serial.println("OUT CRASH Val_current: " + String(Val_current));
+      // Serial.println("Val_current: " + String(Val_current));
       
       if (!there_is_out_crash)//((Old_val1 > 800) && (Old_val2 >= Old_val1 * deltaAdc) && (Val_current >= Old_val2 * deltaAdc)) {
       {
@@ -236,10 +246,10 @@ void check_current2(float deltaAdc) {
       // Serial.println("Val_current: " + String(Val_current));
       // float delta = (Val_current-Old_val)/Old_val;
       // Serial.println("delta: " + String(delta));
-      Serial.println("IN CRASH Val_current: " + String(Val_current));
+      // Serial.println("Val_current: " + String(Val_current));
       // Serial.println("Old_val1: " + String(Old_val1));
       // Serial.println("Old_val2: " + String(Old_val2));
-      //Serial.println("Val_current: " + String(Val_current));
+      // Serial.println("Val_current: " + String(Val_current));
       if (!there_is_in_crash)//(((Old_val1 > 800) && (Old_val2 >= Old_val1 * deltaAdc) && (Val_current >= Old_val2 * deltaAdc)) || (Val_current > Adc_max)) {
       {
         time_cur = millis();
@@ -271,7 +281,15 @@ void check_current2(float deltaAdc) {
         // longbuzz();
         stt_direction = 0;
         step_in2 = 0;
-        step_in = Step_speed_min - step_in;
+        if (step_in < Step_speed_min)
+        {
+          step_in = Step_speed_min - step_in;
+        }
+        else
+        {
+          step_in = 0;
+        }
+        
         there_is_in_crash = false;
       
       // Old_val1 = Old_val2;

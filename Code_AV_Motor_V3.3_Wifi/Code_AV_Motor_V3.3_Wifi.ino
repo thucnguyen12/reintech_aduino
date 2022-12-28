@@ -79,12 +79,13 @@ BaseType_t xTimer1Started;
 #define Button2 18
 #define SS_Pin 15  //pin SS Ethernet
 
-#define mainONE_SHOT_TIMER_PERIOD pdMS_TO_TICKS(2)
-#define ADC_MAX_SAMPLE 20
+#define mainONE_SHOT_TIMER_PERIOD pdMS_TO_TICKS(5)
+#define ADC_MAX_SAMPLE 5
 #define CHECK_IN_CRASH 0
 #define CHECK_OUT_CRASH 1
 #define MAX_ADC_OUT_CRASH 1300
-#define MAX_ADC_IN_CRASH 980
+#define MAX_ADC_IN_CRASH 900 // 1140
+#define DEFAULT_PEAK_VAL 2400
 static int in_crash_counter = 0;
 static int check_adc_period_cnt = 0;
 const byte DNSPORT = 53;
@@ -125,7 +126,7 @@ String chipId, st, stt_wifi, stt_lan;
 
 int current_val, current_old = 0;
 char inchar, Blechar, Lanchar, WifiChar;
-unsigned long time_run, time_cur;
+unsigned long time_run, time_cur, first_time_current_peak;
 unsigned long time_step, time_noi;
 int step_in, step_in2;
 bool stt_step, dk_run = false, dk_cur = false;
@@ -133,22 +134,25 @@ int speed_max = 150,  //us
   speed_start = 400,  //us
   speed_min = 450,    //us
   Step_up_down = 4500,
-    Step_speed_down = 48000,
+    Step_speed_down = 49000,
     Step_speed_min = 53000;  //52500
 int sped;
 float Adc_delta1 = 1.05;  //delta ADC va chạm ngoài
 float Adc_delta2 = 1.04;  //delta ADC va chạm trong
 //int Adc_max = 1180;      //NGưỡng max ADC, nếu vượt qua ngưỡng này sẽ dừng động cơ
 
-int Val_current;
+int Val_current, Val_current_rate_for_incrash;
 int Val_current_make_crash = 0;
+int peak_Val_in_crash = DEFAULT_PEAK_VAL;
 int sumVal = 0;
 float Accelera;
 byte k = 0;
 bool first_time_adc = true;
 bool new_adc_value = false;
-int check_current_for_direction = 0;
+int check_current_for_direction = 1;
 bool there_is_in_crash = false, there_is_out_crash =  false;
+int counting_peak_time = 0;
+
 
 int Val_array[ADC_MAX_SAMPLE];
 int Old_val1 = 100, Old_val2 = 100;
@@ -295,6 +299,8 @@ void longbuzz() {
   //    delay(1000);
 }
 
+int last_check_current_for_direction, last_counting_peak_time, last_there_is_in_crash;
+
 void prvOneShotTimerCallback( TimerHandle_t xTimer )
 {
 
@@ -322,40 +328,93 @@ void prvOneShotTimerCallback( TimerHandle_t xTimer )
     }
 
     Val_current = sumVal / ADC_MAX_SAMPLE;
+    Val_current_rate_for_incrash = sped/speed_max*Val_current;
     if (first_time_adc)
     {
       Old_val2 = Val_current;
       Old_val1 = Old_val2;
     }
     first_time_adc = false;
-    if (check_adc_period_cnt++ > 100)
+    if (check_adc_period_cnt++ > 4)
     {
       check_adc_period_cnt == 0;
+      // if (last_check_current_for_direction != check_current_for_direction
+      //   || last_counting_peak_time != counting_peak_time
+      //   || last_there_is_in_crash != there_is_in_crash)
+      // {
+      //   last_check_current_for_direction = check_current_for_direction;
+      //   last_counting_peak_time = counting_peak_time;
+      //   last_there_is_in_crash = there_is_in_crash;
+
+      //   ets_printf("[%d] check dir = %d, counter %d, in crash %d\r\n", 
+      //           millis(), check_current_for_direction, counting_peak_time, there_is_in_crash ? 1 : 0);
+      // }
+      
       if (check_current_for_direction == CHECK_IN_CRASH)
       {
-        if (((Old_val1 > 800) && (Old_val2 >= (Old_val1 * 104 / 100)) && (Val_current >= (Old_val2 * 104 / 100)))
-          || (Val_current > MAX_ADC_IN_CRASH)) 
+        if (stt_direction && Val_current_rate_for_incrash)
         {
-          in_crash_counter = 4;
+          ets_printf("s1:[%d],v1:{%d},v2(%d)\r\n",counting_peak_time, peak_Val_in_crash, Val_current_rate_for_incrash);
+          //ets_printf("p:%d\r\n",counting_peak_time);
+        }
+        
+        if ((Val_current_rate_for_incrash > peak_Val_in_crash) && (sped/speed_max > 2))
+        {
+          if ((Val_current_rate_for_incrash - peak_Val_in_crash) > 100) //Neu dong hien tai lon hon nguong qua nhieu -> set lai nguong
+          {
+            peak_Val_in_crash = Val_current_rate_for_incrash;
+            counting_peak_time = 0;   //reset counter
+          }
+          counting_peak_time++;       //san sang cho lan quet tiep
+          //first_time_current_peak = millis();
+        }
+        else if (counting_peak_time && (Val_current_rate_for_incrash > (peak_Val_in_crash * 7 / 10)))
+        {
+          counting_peak_time++;
+        }
+        else if (Val_current_rate_for_incrash < (peak_Val_in_crash * 7 / 10))
+        {
+          peak_Val_in_crash = DEFAULT_PEAK_VAL;
+          counting_peak_time = 0;
         }
 
-        if (in_crash_counter)
+                //int is_crashed_by_adc = ;
+        
+        //if (((Old_val1 > MAX_ADC_IN_CRASH) && (Old_val2 >= (Old_val1 * 104 / 100)) && (Val_current >= (Old_val1 * 104 / 100)))
+        if (counting_peak_time > 100) 
         {
-          in_crash_counter--;
-          if (in_crash_counter == 0)
+          //in_crash_counter = 2;
+          // if ((counting_peak_time > 500) )//&& ((millis() - first_time_current_peak) > 8000))
           {
-            Old_val1_make_crash = Old_val1;
-            Old_val2_make_crash = Old_val2;
-            Val_current_make_crash = Val_current;
-            there_is_in_crash = true;
+              //in_crash_counter = 0;
+              peak_Val_in_crash = DEFAULT_PEAK_VAL;
+              counting_peak_time = 0;
+              Old_val1_make_crash = Old_val1;
+              Old_val2_make_crash = Old_val2;
+              Val_current_make_crash = Val_current;
+              there_is_in_crash = true;
           }
         }
+
+        
+
+        // if (in_crash_counter)
+        // {
+        //   in_crash_counter--;
+        //   if (in_crash_counter == 0)
+        //   {
+        //     Old_val1_make_crash = Old_val1;
+        //     Old_val2_make_crash = Old_val2;
+        //     Val_current_make_crash = Val_current;
+        //     there_is_in_crash = true;
+        //   }
+        // }
       }
       else if (check_current_for_direction == CHECK_OUT_CRASH)
       {   
-          if (((Old_val1 > 855) 
+          if (((Old_val1 > 900) 
           && (Old_val2 >= (Old_val1 * 105 / 100)) && 
-          (Val_current >= (Old_val2 * 105 / 100))) || (Val_current > MAX_ADC_OUT_CRASH)) 
+          (Val_current >= (Old_val1 * 105 / 100))) || (Val_current > MAX_ADC_OUT_CRASH)) 
           {
           // Motor_stop_in_isr();
           Old_val1_make_crash = Old_val1;
