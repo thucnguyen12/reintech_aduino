@@ -86,6 +86,7 @@ BaseType_t xTimer1Started;
 #define MAX_ADC_OUT_CRASH 1300
 #define MAX_ADC_IN_CRASH 900 // 1140
 #define DEFAULT_PEAK_VAL 2400
+#define MAX_SAMPLE_CHECK_OUT 50
 static int in_crash_counter = 0;
 static int check_adc_period_cnt = 0;
 const byte DNSPORT = 53;
@@ -163,6 +164,10 @@ String mqtt_func;
 bool Lan_Connect = true;
 bool dk_lan;
 
+//
+int arr_for_check [MAX_SAMPLE_CHECK_OUT];
+//bool first_time_read_adc = true;
+//
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) {
     deviceConnected = true;
@@ -254,7 +259,7 @@ void setup() {
   WifiChar = 's';
   Serial.println("Start AV Control V3.2");
 
-  xOneShotTimer = xTimerCreate("OneShot", mainONE_SHOT_TIMER_PERIOD, pdTRUE, 0, prvOneShotTimerCallback );
+  xOneShotTimer = xTimerCreate("OneShot", mainONE_SHOT_TIMER_PERIOD, pdTRUE, 0, prvAutoReloadTimerCallback );
   if(xOneShotTimer != NULL)
   {
     Serial.println("Creat timer ok");
@@ -301,7 +306,7 @@ void longbuzz() {
 
 int last_check_current_for_direction, last_counting_peak_time, last_there_is_in_crash;
 
-void prvOneShotTimerCallback( TimerHandle_t xTimer )
+void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
 {
 
     Val_array[k] = analogRead(CURRENT_SENSOR);//doc du lieu camr bien
@@ -313,6 +318,7 @@ void prvOneShotTimerCallback( TimerHandle_t xTimer )
           Val_array[i] =  Val_array[k];
         }
         
+
     }
 
     k++;
@@ -329,15 +335,33 @@ void prvOneShotTimerCallback( TimerHandle_t xTimer )
 
     Val_current = sumVal / ADC_MAX_SAMPLE;
     Val_current_rate_for_incrash = sped/speed_max*Val_current;
-    if (first_time_adc)
-    {
-      Old_val2 = Val_current;
-      Old_val1 = Old_val2;
-    }
-    first_time_adc = false;
+    
+    
     if (check_adc_period_cnt++ > 4)
     {
       check_adc_period_cnt == 0;
+      if (first_time_adc && Val_current)
+      {
+        Old_val2 = Val_current;
+        Old_val1 = Old_val2;
+        for (int j = 0; j < MAX_SAMPLE_CHECK_OUT; j++)
+        {
+          arr_for_check[j] = Val_current;
+        }
+        first_time_adc = false;
+      }
+      else
+      {
+        for (int j = 1; j < MAX_SAMPLE_CHECK_OUT; j++)
+        {
+          
+          arr_for_check[j-1] = arr_for_check [j];
+          if (j == MAX_SAMPLE_CHECK_OUT - 1)
+          {
+            arr_for_check[MAX_SAMPLE_CHECK_OUT - 1] = Val_current;
+          }
+        }
+      }
       // if (last_check_current_for_direction != check_current_for_direction
       //   || last_counting_peak_time != counting_peak_time
       //   || last_there_is_in_crash != there_is_in_crash)
@@ -354,7 +378,7 @@ void prvOneShotTimerCallback( TimerHandle_t xTimer )
       {
         if (stt_direction && Val_current_rate_for_incrash)
         {
-          ets_printf("s1:[%d],v1:{%d},v2(%d)\r\n",counting_peak_time, peak_Val_in_crash, Val_current_rate_for_incrash);
+          //ets_printf("s1:[%d],v1:{%d},v2(%d)\r\n",counting_peak_time, peak_Val_in_crash, Val_current_rate_for_incrash);
           //ets_printf("p:%d\r\n",counting_peak_time);
         }
         
@@ -381,7 +405,7 @@ void prvOneShotTimerCallback( TimerHandle_t xTimer )
                 //int is_crashed_by_adc = ;
         
         //if (((Old_val1 > MAX_ADC_IN_CRASH) && (Old_val2 >= (Old_val1 * 104 / 100)) && (Val_current >= (Old_val1 * 104 / 100)))
-        if (counting_peak_time > 100) 
+        if (counting_peak_time > 50) 
         {
           //in_crash_counter = 2;
           // if ((counting_peak_time > 500) )//&& ((millis() - first_time_current_peak) > 8000))
@@ -411,17 +435,35 @@ void prvOneShotTimerCallback( TimerHandle_t xTimer )
         // }
       }
       else if (check_current_for_direction == CHECK_OUT_CRASH)
-      {   
-          if (((Old_val1 > 900) 
-          && (Old_val2 >= (Old_val1 * 105 / 100)) && 
-          (Val_current >= (Old_val1 * 105 / 100))) || (Val_current > MAX_ADC_OUT_CRASH)) 
+      {
+        if (stt_direction && Val_current)
+        {
+            //ets_printf("o1:[%d],o2:{%d},v(%d)\r\n",Old_val1, Old_val2, Val_current);
+            ets_printf("%d\r\n", arr_for_check[0]);
+        
+           
+          // if (((Old_val1 > 900) 
+          // && (Old_val2 >= (Old_val1 * 110 / 100)) && 
+          // (Val_current >= (Old_val2 * 110 / 100))) || (Val_current > MAX_ADC_OUT_CRASH)) 
+          static int cnt = 0;
+          if (((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  - arr_for_check[0]) >= (arr_for_check[0]* 24 / 100)) && (arr_for_check [0] > 900))
           {
+            
+            cnt++;
+            if (cnt == 5) 
+            {
+              cnt = 0;
+              ets_printf ("now: %d, last: %d \r\n", arr_for_check[MAX_SAMPLE_CHECK_OUT - 1], arr_for_check[0]);
+              there_is_out_crash = true;
+            }
+            
           // Motor_stop_in_isr();
-          Old_val1_make_crash = Old_val1;
-          Old_val2_make_crash = Old_val2;
-          Val_current_make_crash = Val_current;
-          there_is_out_crash = true;
+            // Old_val1_make_crash = Old_val1;
+            // Old_val2_make_crash = Old_val2;
+            // Val_current_make_crash = Val_current;
+            
           }
+        }
         
       }
       Old_val1 = Old_val2;
