@@ -7,6 +7,7 @@ void toc_do() {
       // if (step_in2 % 100 == 0)
       //Serial.println("step in2 < step_up down:"+ String(step_in2));
       sped = speed_start - (step_in2 / 10) * Accelera;
+      check_current_for_direction = NO_CHECK_WHEN_START;
     } else if (step_in < Step_speed_down) {
       // if (step_in % 100 == 0)
       //Serial.println("step in < step_speed_down:"+ String(step_in));
@@ -27,8 +28,10 @@ void toc_do() {
       // if (step_in % 100 == 0)
       //Serial.println("step in > step_speed_min: "+ String(step_in));
       sped = speed_min;
-      check_current_for_direction = CHECK_IN_CRASH;
-      check_current2(Adc_delta2);
+      if (stt_direction) {
+        check_current_for_direction = CHECK_IN_CRASH;
+        check_current2(Adc_delta2);
+      }
     }
   }
 }
@@ -111,12 +114,13 @@ void Motor_run(byte stt) {    // 1 là ra, 0 là chạy vào
   }
   Serial.println("Dung dong co");
   Motor_stop();
+  
 }
 
 void Motor_stop() {
   digitalWrite(EN_Pin, 1);
   digitalWrite(STEP, 0);
-
+  counting_start = 0;
   dk_run = false;
   if (stt_direction == 1) {
     Serial.println("Step_speed_min - step_in");
@@ -189,10 +193,10 @@ void check_current(float deltaAdc) {
         WifiChar = 's';
         dk_run = false;
         Serial.println("impact delta");
-        Serial.println("Old_val1: " + String(Old_val1_make_crash));
-        Serial.println("Old_val2: " + String(Old_val2_make_crash));
+        // Serial.println("Old_val1: " + String(Old_val1_make_crash));
+        // Serial.println("Old_val2: " + String(Old_val2_make_crash));
         Serial.println("Val_current: " + String(Val_current_make_crash));
-        delay(100);
+        //delay(100);
         digitalWrite(DIR, 0);
         longbuzz();
         stt_direction = 0;

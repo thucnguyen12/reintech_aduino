@@ -25,11 +25,17 @@ void checkLM_SW(bool stt) {
     if (digitalRead(SW1) == 0) {
       if (digitalRead(SW1) == 0) {
         Serial.println("Cham SW1!");
-        check_current_for_direction = CHECK_OUT_CRASH;
+        for (int i = 0; i < 100; i++) {
+          digitalWrite(STEP, HIGH);
+          delayMicroseconds(speed_min);
+          digitalWrite(STEP, LOW);
+          delayMicroseconds(speed_min);
+        }
         Serial.print("step_in: ");
         Serial.println(step_in);
         //        Serial.print("step_out: ");
         //        Serial.println(step_out);
+
         Motor_stop();
         stt_direction = 1;
         step_in = 0;

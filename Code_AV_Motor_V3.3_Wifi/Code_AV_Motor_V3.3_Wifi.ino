@@ -83,10 +83,14 @@ BaseType_t xTimer1Started;
 #define ADC_MAX_SAMPLE 5
 #define CHECK_IN_CRASH 0
 #define CHECK_OUT_CRASH 1
+#define NO_CHECK_WHEN_START 2
 #define MAX_ADC_OUT_CRASH 1300
 #define MAX_ADC_IN_CRASH 900 // 1140
 #define DEFAULT_PEAK_VAL 2400
-#define MAX_SAMPLE_CHECK_OUT 50
+#define MAX_SAMPLE_CHECK_OUT 75
+#define NO_LOAD 0 
+#define NORMAL_LOAD 1
+#define HEAVY_LOAD 2 
 static int in_crash_counter = 0;
 static int check_adc_period_cnt = 0;
 const byte DNSPORT = 53;
@@ -150,10 +154,11 @@ float Accelera;
 byte k = 0;
 bool first_time_adc = true;
 bool new_adc_value = false;
-int check_current_for_direction = 1;
+int check_current_for_direction = NO_CHECK_WHEN_START;
+int load_use = NO_LOAD;
 bool there_is_in_crash = false, there_is_out_crash =  false;
 int counting_peak_time = 0;
-
+int counting_start = 0;
 
 int Val_array[ADC_MAX_SAMPLE];
 int Old_val1 = 100, Old_val2 = 100;
@@ -340,28 +345,32 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
     if (check_adc_period_cnt++ > 4)
     {
       check_adc_period_cnt == 0;
-      if (first_time_adc && Val_current)
+      if (check_current_for_direction != NO_CHECK_WHEN_START)
       {
-        Old_val2 = Val_current;
-        Old_val1 = Old_val2;
-        for (int j = 0; j < MAX_SAMPLE_CHECK_OUT; j++)
-        {
-          arr_for_check[j] = Val_current;
-        }
-        first_time_adc = false;
-      }
-      else
-      {
-        for (int j = 1; j < MAX_SAMPLE_CHECK_OUT; j++)
-        {
-          
-          arr_for_check[j-1] = arr_for_check [j];
-          if (j == MAX_SAMPLE_CHECK_OUT - 1)
+          if (first_time_adc && Val_current)
           {
-            arr_for_check[MAX_SAMPLE_CHECK_OUT - 1] = Val_current;
+            Old_val2 = Val_current;
+            Old_val1 = Old_val2;
+            for (int j = 0; j < MAX_SAMPLE_CHECK_OUT; j++)
+            {
+              arr_for_check[j] = Val_current;
+            }
+            first_time_adc = false;
           }
-        }
+          else
+          {
+            for (int j = 1; j < MAX_SAMPLE_CHECK_OUT; j++)
+            {
+              
+              arr_for_check[j-1] = arr_for_check [j];
+              if (j == MAX_SAMPLE_CHECK_OUT - 1)
+              {
+                arr_for_check[MAX_SAMPLE_CHECK_OUT - 1] = Val_current;
+              }
+            }
+          }
       }
+      
       // if (last_check_current_for_direction != check_current_for_direction
       //   || last_counting_peak_time != counting_peak_time
       //   || last_there_is_in_crash != there_is_in_crash)
@@ -439,32 +448,99 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
         if (stt_direction && Val_current)
         {
             //ets_printf("o1:[%d],o2:{%d},v(%d)\r\n",Old_val1, Old_val2, Val_current);
+            counting_start++;
             ets_printf("%d\r\n", arr_for_check[0]);
-        
+            if (counting_start == 241)
+            {
+              int count_1 = 0;
+              int count_2 = 0;
+              int count_3 = 0;
+              for ( int i = 0; i < 50; i++)
+              {
+                // ets_printf("val now: %d\r\n", arr_for_check[i]);
+                if (arr_for_check[i] > 1300)
+                {
+                  count_1++;
+                  if (count_1 >=45)
+                  {
+                   // ets_printf ("all val > 1200\r\n");
+                    load_use = HEAVY_LOAD;
+                  }
+                }
+                else if (arr_for_check[i] < 1200)
+                {
+                  count_2++;
+                  if (count_2 >=45)
+                  {
+                   // ets_printf ("all val > 1200\r\n");
+                    load_use = NORMAL_LOAD;
+                  }
+                }
+                else if (arr_for_check[i] < 1000)
+                {
+                  count_3++;
+                  if (count_3 >= 45)
+                  {
+                    load_use = NO_LOAD;
+                  }
+                }
+              }
+            }
+            //ets_printf ("now: %d, last: %d \r\n", arr_for_check[MAX_SAMPLE_CHECK_OUT - 1], arr_for_check[0]);
            
           // if (((Old_val1 > 900) 
           // && (Old_val2 >= (Old_val1 * 110 / 100)) && 
           // (Val_current >= (Old_val2 * 110 / 100))) || (Val_current > MAX_ADC_OUT_CRASH)) 
           static int cnt = 0;
-          if (((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  - arr_for_check[0]) >= (arr_for_check[0]* 24 / 100)) && (arr_for_check [0] > 900))
+          if ((load_use != HEAVY_LOAD))
           {
-            
-            cnt++;
-            if (cnt == 5) 
+            if (((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  - arr_for_check[0]) >= (arr_for_check[0]* 20 / 100)) 
+                && (arr_for_check [0] > 590) 
+                && (arr_for_check[MAX_SAMPLE_CHECK_OUT - 1] > 1050)
+               )
             {
-              cnt = 0;
-              ets_printf ("now: %d, last: %d \r\n", arr_for_check[MAX_SAMPLE_CHECK_OUT - 1], arr_for_check[0]);
-              there_is_out_crash = true;
+              counting_start = 0;
+              
+              cnt++;
+              if (cnt == 15) 
+              {
+                cnt = 0;
+                ets_printf ("now: %d, last: %d \r\n", arr_for_check[MAX_SAMPLE_CHECK_OUT - 1], arr_for_check[0]);
+                there_is_out_crash = true;
+              }
+              
+            // Motor_stop_in_isr();
+              // Old_val1_make_crash = Old_val1;
+              // Old_val2_make_crash = Old_val2;
+              // Val_current_make_crash = Val_current;
+              
             }
-            
-          // Motor_stop_in_isr();
-            // Old_val1_make_crash = Old_val1;
-            // Old_val2_make_crash = Old_val2;
-            // Val_current_make_crash = Val_current;
-            
+            else if ((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  <= arr_for_check[0])) {
+                cnt = 0;
+            }
+          }
+          else if (load_use == HEAVY_LOAD)
+          {
+            if ((arr_for_check [0] >= 1300) && (arr_for_check[MAX_SAMPLE_CHECK_OUT - 1] <= (arr_for_check[0]*9/10)))
+            {
+              cnt++;
+              if (cnt > 15)
+              {
+                cnt = 0;
+                ets_printf ("hvl ,now: %d, last: %d \r\n", arr_for_check[MAX_SAMPLE_CHECK_OUT - 1], arr_for_check[0]);
+                there_is_out_crash = true;
+              }
+            }
           }
         }
         
+      }
+      else if (check_current_for_direction == NO_CHECK_WHEN_START)
+      {
+        //ets_printf("now no need check\r\n");
+        counting_start = 0;
+        there_is_out_crash = false;
+        there_is_in_crash = false;
       }
       Old_val1 = Old_val2;
       Old_val2 = Val_current;
