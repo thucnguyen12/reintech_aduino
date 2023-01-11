@@ -202,7 +202,7 @@ void check_current(float deltaAdc) {
         stt_direction = 0;
         step_in2 = 0;
         step_in = Step_speed_min - step_in;
-        for (int i = 0; i < 2600; i++) {
+        for (int i = 0; i < 3100; i++) {
           digitalWrite(STEP, HIGH);
           delayMicroseconds(speed_min);
           step_in++;

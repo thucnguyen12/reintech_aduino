@@ -3,7 +3,7 @@ void checkLM_SW(bool stt) {
     if (digitalRead(SW2) == 0) {
       if (digitalRead(SW2) == 0) {
         Serial.println("Cham SW2!");
-        for (int i = 0; i < 800; i++) {
+        for (int i = 0; i < 1600; i++) {
           digitalWrite(STEP, HIGH);
           delayMicroseconds(speed_min);
           digitalWrite(STEP, LOW);

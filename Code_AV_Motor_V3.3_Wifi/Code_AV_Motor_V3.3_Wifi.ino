@@ -86,13 +86,14 @@ BaseType_t xTimer1Started;
 #define NO_CHECK_WHEN_START 2
 #define MAX_ADC_OUT_CRASH 1300
 #define MAX_ADC_IN_CRASH 900 // 1140
-#define DEFAULT_PEAK_VAL 2400
-#define MAX_SAMPLE_CHECK_OUT 75
+#define DEFAULT_PEAK_VAL 2000
+#define MAX_SAMPLE_CHECK_OUT 60
 #define NO_LOAD 0 
 #define NORMAL_LOAD 1
 #define HEAVY_LOAD 2 
 static int in_crash_counter = 0;
 static int check_adc_period_cnt = 0;
+static int check_adc_period_cnt_for_outcrash = 0;
 const byte DNSPORT = 53;
 // IPAddress apIP(8,8,4,4); // The default android DNS
 DNSServer dnsServer;
@@ -154,7 +155,7 @@ float Accelera;
 byte k = 0;
 bool first_time_adc = true;
 bool new_adc_value = false;
-int check_current_for_direction = NO_CHECK_WHEN_START;
+int check_current_for_direction = CHECK_OUT_CRASH;
 int load_use = NO_LOAD;
 bool there_is_in_crash = false, there_is_out_crash =  false;
 int counting_peak_time = 0;
@@ -344,13 +345,13 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
     
     if (check_adc_period_cnt++ > 4)
     {
+      check_adc_period_cnt_for_outcrash++;
       check_adc_period_cnt == 0;
-      if (check_current_for_direction != NO_CHECK_WHEN_START)
+      if (check_current_for_direction != NO_CHECK_WHEN_START && (check_adc_period_cnt_for_outcrash > 2))
       {
+        check_adc_period_cnt_for_outcrash = 0;
           if (first_time_adc && Val_current)
           {
-            Old_val2 = Val_current;
-            Old_val1 = Old_val2;
             for (int j = 0; j < MAX_SAMPLE_CHECK_OUT; j++)
             {
               arr_for_check[j] = Val_current;
@@ -388,7 +389,7 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
         if (stt_direction && Val_current_rate_for_incrash)
         {
           //ets_printf("s1:[%d],v1:{%d},v2(%d)\r\n",counting_peak_time, peak_Val_in_crash, Val_current_rate_for_incrash);
-          //ets_printf("p:%d\r\n",counting_peak_time);
+          ets_printf("%d\r\n",Val_current_rate_for_incrash);
         }
         
         if ((Val_current_rate_for_incrash > peak_Val_in_crash) && (sped/speed_max > 2))
@@ -414,7 +415,7 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
                 //int is_crashed_by_adc = ;
         
         //if (((Old_val1 > MAX_ADC_IN_CRASH) && (Old_val2 >= (Old_val1 * 104 / 100)) && (Val_current >= (Old_val1 * 104 / 100)))
-        if (counting_peak_time > 50) 
+        if (counting_peak_time > 75) 
         {
           //in_crash_counter = 2;
           // if ((counting_peak_time > 500) )//&& ((millis() - first_time_current_peak) > 8000))
@@ -422,8 +423,6 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
               //in_crash_counter = 0;
               peak_Val_in_crash = DEFAULT_PEAK_VAL;
               counting_peak_time = 0;
-              Old_val1_make_crash = Old_val1;
-              Old_val2_make_crash = Old_val2;
               Val_current_make_crash = Val_current;
               there_is_in_crash = true;
           }
@@ -467,7 +466,7 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
                     load_use = HEAVY_LOAD;
                   }
                 }
-                else if (arr_for_check[i] < 1200)
+                else if (arr_for_check[i] < 1300)
                 {
                   count_2++;
                   if (count_2 >=45)
@@ -494,15 +493,17 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
           static int cnt = 0;
           if ((load_use != HEAVY_LOAD))
           {
-            if (((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  - arr_for_check[0]) >= (arr_for_check[0]* 20 / 100)) 
+            //ets_printf ("now: %d, last: %d \r\n", arr_for_check[MAX_SAMPLE_CHECK_OUT - 1], arr_for_check[0]);
+            if (((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  - arr_for_check[0]) >= (arr_for_check[0]* 8 / 100)) 
                 && (arr_for_check [0] > 590) 
-                && (arr_for_check[MAX_SAMPLE_CHECK_OUT - 1] > 1050)
+                && (arr_for_check[MAX_SAMPLE_CHECK_OUT - 1] > 850)
                )
             {
               counting_start = 0;
               
               cnt++;
-              if (cnt == 15) 
+              //ets_printf("cnt %d", cnt);
+              if (cnt >= 15) 
               {
                 cnt = 0;
                 ets_printf ("now: %d, last: %d \r\n", arr_for_check[MAX_SAMPLE_CHECK_OUT - 1], arr_for_check[0]);
@@ -515,7 +516,7 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
               // Val_current_make_crash = Val_current;
               
             }
-            else if ((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  <= arr_for_check[0])) {
+            else if ((arr_for_check[MAX_SAMPLE_CHECK_OUT - 1]  <= arr_for_check[0] * 8 / 10)) {
                 cnt = 0;
             }
           }
@@ -542,7 +543,7 @@ void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
         there_is_out_crash = false;
         there_is_in_crash = false;
       }
-      Old_val1 = Old_val2;
-      Old_val2 = Val_current;
+      // Old_val1 = Old_val2;
+      // Old_val2 = Val_current;
     }
 }
